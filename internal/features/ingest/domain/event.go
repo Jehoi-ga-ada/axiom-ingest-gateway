@@ -25,3 +25,33 @@ func (e EventType) IsValid() bool {
 	}
 	return true
 }
+
+func NewEvent(
+	eventType string,
+	timestamp time.Time,
+	payload map[string]any,
+	now time.Time,
+) (*Event, error) {
+	et := EventType(eventType)
+	if !et.IsValid() {
+		return nil, ErrInvalidType
+	}
+
+	if timestamp.IsZero() {
+		return nil, ErrInvalidTimestamp
+	}
+
+	if timestamp.After(now.Add(5*time.Minute)) || timestamp.Before(now.Add(-24*time.Hour)) {
+		return nil, ErrInvalidTimestamp
+	}
+
+	if payload == nil {
+		return nil, ErrInvalidPayload
+	}
+
+	return &Event{
+		Type: et,
+		Timestamp: timestamp,
+		Payload: payload,
+	}, nil
+}

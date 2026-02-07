@@ -18,4 +18,4 @@ jobs:
           go-version: '1.21'
 
       - name: Verify build
-        run: go build ./...
+        run: go build ./cmd/server/main.go

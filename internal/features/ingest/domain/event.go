@@ -31,17 +31,36 @@ func (e EventType) IsValid() bool {
 	return true
 }
 
+func (e Event) IsValid() error {
+	if !e.Type.IsValid() {
+		return ErrInvalidType
+	}
+
+	// TODO: Add checking for other field
+
+	return nil
+}
+
 func NewEvent(eventType string, timestamp time.Time, rawBody []byte) (*Event, error) {
     entropy := rand.Reader
     id, err := ulid.New(ulid.Timestamp(timestamp), entropy)
+
     if err != nil {
         return nil, err
     }
 
-    return &Event{
+    event := &Event{
         ID:        id,
         Type:      EventType(eventType),
         Timestamp: timestamp,
         RawBody:   rawBody,
-    }, nil
+    }
+
+	err = event.IsValid()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return event, nil
 }

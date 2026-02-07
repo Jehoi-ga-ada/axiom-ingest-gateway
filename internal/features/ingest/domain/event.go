@@ -8,7 +8,6 @@ import (
 )
 
 type EventType string
-type Payload map[string]any
 
 type Event struct {
 	ID ulid.ULID

@@ -1,14 +1,20 @@
 package domain
 
-import "time"
+import (
+	"crypto/rand"
+	"time"
+
+	"github.com/oklog/ulid/v2"
+)
 
 type EventType string
 type Payload map[string]any
 
 type Event struct {
+	ID ulid.ULID
 	Type EventType
 	Timestamp time.Time
-	Payload Payload
+	RawBody []byte
 }
 
 func (e EventType) IsValid() bool {
@@ -26,32 +32,17 @@ func (e EventType) IsValid() bool {
 	return true
 }
 
-func NewEvent(
-	eventType string,
-	timestamp time.Time,
-	payload map[string]any,
-	now time.Time,
-) (*Event, error) {
-	et := EventType(eventType)
-	if !et.IsValid() {
-		return nil, ErrInvalidType
-	}
+func NewEvent(eventType string, timestamp time.Time, rawBody []byte) (*Event, error) {
+    entropy := rand.Reader
+    id, err := ulid.New(ulid.Timestamp(timestamp), entropy)
+    if err != nil {
+        return nil, err
+    }
 
-	if timestamp.IsZero() {
-		return nil, ErrInvalidTimestamp
-	}
-
-	if timestamp.After(now.Add(5*time.Minute)) || timestamp.Before(now.Add(-24*time.Hour)) {
-		return nil, ErrInvalidTimestamp
-	}
-
-	if payload == nil {
-		return nil, ErrInvalidPayload
-	}
-
-	return &Event{
-		Type: et,
-		Timestamp: timestamp,
-		Payload: payload,
-	}, nil
+    return &Event{
+        ID:        id,
+        Type:      EventType(eventType),
+        Timestamp: timestamp,
+        RawBody:   rawBody,
+    }, nil
 }

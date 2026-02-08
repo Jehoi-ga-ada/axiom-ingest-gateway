@@ -1,7 +1,7 @@
 package dto
 
 type WebResponse struct {
-	Status string
-	Data any
-	Errs any
+	Status string `json:"status"`
+	Data any `json:"data,omitempty"`
+	Errs any `json:"errors,omitempty"`
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/application/usecase"
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/delivery/dto"
 	u "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/shared/utils"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 type EventHandler struct {
@@ -20,17 +20,10 @@ func NewEventHandler(ei usecase.EventIngester) *EventHandler {
 	}
 }
 
-func (h *EventHandler) PublicRoutes() chi.Router {
-	r := chi.NewRouter()
-	r.Post("/", h.NewEvent)
-
-	return r
-}
-
-func (h *EventHandler) ProtectedRoutes() chi.Router {
-	r := chi.NewRouter()
-
-	return r
+func (h *EventHandler) Register(r chi.Router) {
+	r.Group(func (r chi.Router) {
+		r.Post("/", h.NewEvent)
+	})
 }
 
 func (h *EventHandler) NewEvent(w http.ResponseWriter, r *http.Request) {

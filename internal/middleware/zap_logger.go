@@ -15,7 +15,10 @@ func ZapLogger(log *zap.Logger) func(next http.Handler) http.Handler {
 			t1 := time.Now()
 
 			defer func() {
+				requestID := middleware.GetReqID(r.Context())
+			
 				log.Info("request completed",
+					zap.String("request_id", requestID), 
 					zap.String("method", r.Method),
 					zap.String("path", r.URL.Path),
 					zap.Int("status", ww.Status()),

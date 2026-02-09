@@ -22,8 +22,9 @@ func (u *eventIngester) Execute(ctx context.Context, req dto.CreateEventRequest)
 	e, err := domain.NewEvent(req.Type, req.Timestamp, req.RawBody)
 
 	if err != nil {
-		u.logger.Fatal("Failed to create event with error",
-			zap.String("error", err.Error()),
+		u.logger.Error("failed to create event with error",
+			zap.Error(err),
+			zap.String("event_type", req.Type),
 		)
 		return "", err
 	}

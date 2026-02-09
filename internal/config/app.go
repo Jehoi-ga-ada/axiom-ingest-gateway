@@ -15,7 +15,7 @@ type Config struct {
 }
 
 func NewApp(config *Config) {
-	eventIngester := ucEvent.NewEventIngester()
+	eventIngester := ucEvent.NewEventIngester(config.Logger)
 	eventHandler := eventHttp.NewEventHandler(eventIngester)
 
 	config.Router.Route("/api/v1", func(r chi.Router) {

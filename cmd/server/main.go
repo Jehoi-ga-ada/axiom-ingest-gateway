@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/config"
@@ -13,11 +17,12 @@ func main() {
 	logger, err := config.NewLogger()
 	if err != nil {
 		fmt.Printf("Failed to initialize logger: %s\n", err.Error())
+		return
 	}
 
 	viper, err := config.NewViper()
 	if err != nil {
-		logger.Fatal("Viper failed to unload",
+		logger.Fatal("Viper failed to load",
 			zap.String("err", err.Error()),
 		)
 	}
@@ -47,12 +52,25 @@ func main() {
 		ReadTimeout: 15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout: 15 * time.Second,
+		MaxHeaderBytes: 1024 * 1024,
 	}
 
-	err = server.ListenAndServe()
-	if err != nil {
-		logger.Fatal("Server failed to start",
-			zap.String("err", err.Error()),
-		)
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
+		<-sigint
+
+		logger.Info("Shutdown signal received")
+		if err := server.Shutdown(context.Background()); err != nil {
+			logger.Error("HTTP server Shutdown", zap.Error(err))
+		}
+		close(idleConnsClosed)
+	}()
+
+	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		logger.Fatal("HTTP server ListenAndServe", zap.Error(err))
 	}
+
+	<-idleConnsClosed
 }

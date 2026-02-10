@@ -1,34 +1,28 @@
-package config
+package middleware
 
 import (
-	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 )
 
-func ZapLogger(log *zap.Logger) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+func ZapLogger(log *zap.Logger) func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+		return func(ctx *fasthttp.RequestCtx) {
 			t1 := time.Now()
 
-			defer func() {
-				requestID := middleware.GetReqID(r.Context())
-			
-				log.Info("request completed",
-					zap.String("request_id", requestID), 
-					zap.String("method", r.Method),
-					zap.String("path", r.URL.Path),
-					zap.Int("status", ww.Status()),
-					zap.Duration("latency", time.Since(t1)),
-					zap.Int("size", ww.BytesWritten()),
-					zap.String("remote_ip", r.RemoteAddr),
-				)
-			}()
+			next(ctx)
 
-			next.ServeHTTP(ww, r)
-		})
+			log.Info("request completed",
+				zap.Uint64("request_id", ctx.ID()),
+				zap.ByteString("method", ctx.Method()),
+				zap.ByteString("path", ctx.Path()),
+				zap.Int("status", ctx.Response.StatusCode()),
+				zap.Duration("latency", time.Since(t1)),
+				zap.Int("size", len(ctx.Response.Body())),
+				zap.String("remote_ip", ctx.RemoteAddr().String()),
+			)
+		}
 	}
 }

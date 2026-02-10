@@ -1,13 +1,12 @@
 package http
 
 import (
-	"encoding/json"
-	"net/http"
-
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/application/usecase"
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/delivery/dto"
 	u "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/shared/utils"
-	"github.com/go-chi/chi/v5"
+	"github.com/bytedance/sonic"
+	"github.com/fasthttp/router"
+	"github.com/valyala/fasthttp"
 )
 
 type EventHandler struct {
@@ -20,29 +19,29 @@ func NewEventHandler(ei usecase.EventIngester) *EventHandler {
 	}
 }
 
-func (h *EventHandler) Register(r chi.Router) {
-	r.Group(func (r chi.Router) {
-		r.Post("/", h.NewEvent)
-	})
+func (h *EventHandler) Register(r *router.Group) {
+	r.POST("/", h.NewEvent)
 }
 
-func (h *EventHandler) NewEvent(w http.ResponseWriter, r *http.Request) {
-    r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
+func (h *EventHandler) NewEvent(ctx *fasthttp.RequestCtx) {
+	if len(ctx.PostBody()) > 1024 * 1024 {
+		u.RequestEntityTooLarge(ctx, "Entity is too large, only 1MB is allowed")
+	}
 	
 	req := dto.CreateEventRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		u.BadRequest(w, err.Error())
+	if err := sonic.Unmarshal(ctx.PostBody(), &req); err != nil {
+		u.BadRequest(ctx, err.Error())
 		return
 	}
 
-	eventID, err := h.ei.Execute(r.Context(), req)
+	eventID, err := h.ei.Execute(ctx, req)
 	if err != nil {
-		u.BadRequest(w, err.Error())
+		u.BadRequest(ctx, err.Error())
 		return
 	}
 
-	u.Created(w, dto.CreateEventResponse{
-		EventID: eventID,
-	})
+	resp := dto.CreateEventResponse{EventID: eventID}
+
+	u.Created(ctx, resp)
 }

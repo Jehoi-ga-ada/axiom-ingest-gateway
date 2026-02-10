@@ -1,15 +1,14 @@
 package utils
 
 import (
-	"encoding/json"
-	"net/http"
-
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/shared/dto"
+	"github.com/bytedance/sonic"
+	"github.com/valyala/fasthttp"
 )
 
-func base(w http.ResponseWriter, code int, status string, data, errs any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
+func base(ctx *fasthttp.RequestCtx, code int, status string, data, errs any) {
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(code)
 
 	res := dto.WebResponse{
 		Status: status,
@@ -17,15 +16,20 @@ func base(w http.ResponseWriter, code int, status string, data, errs any) {
 		Errs: errs,
 	}
 
-	json.NewEncoder(w).Encode(res)
+	payload, _ := sonic.Marshal(res)
+	ctx.SetBody(payload)
 }
 
 // --- Success Helpers ---
-func Created(w http.ResponseWriter, data any) {
-	base(w, http.StatusCreated, "CREATED", data, nil)
+func Created(ctx *fasthttp.RequestCtx, data any) {
+	base(ctx, fasthttp.StatusCreated, "CREATED", data, nil)
 }
 
 // --- Client Errors Helpers ---
-func BadRequest(w http.ResponseWriter, message string) {
-	base(w, http.StatusBadRequest, "BAD_REQUEST", nil, message)
+func BadRequest(ctx *fasthttp.RequestCtx, message string) {
+	base(ctx, fasthttp.StatusBadRequest, "BAD_REQUEST", nil, message)
+}
+
+func RequestEntityTooLarge(ctx *fasthttp.RequestCtx, message string) {
+	base(ctx, fasthttp.StatusRequestEntityTooLarge, "STATUS_ENTITY_TOO_LARGE", nil, message)
 }

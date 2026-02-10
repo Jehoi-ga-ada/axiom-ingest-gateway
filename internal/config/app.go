@@ -23,6 +23,4 @@ func NewApp(config *Config) {
 	// --- Events ---
 	events := v1.Group("/events")
 	eventHandler.Register(events)
-
-	
 }

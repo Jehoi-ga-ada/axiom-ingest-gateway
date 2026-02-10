@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"time"
 
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/config"
+	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/middleware"
+	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 )
 
@@ -27,7 +28,7 @@ func main() {
 		)
 	}
 
-	router := config.NewRouter(logger)
+	router := config.NewRouter()
 
 	config.NewApp(&config.Config{
 		Router: router,
@@ -46,13 +47,16 @@ func main() {
 		zap.String("port", port),
 	)
 
-	server := &http.Server{
-		Addr: serverAddr,
-		Handler: router,
+	handler := middleware.ZapLogger(logger)(router.Handler)
+	handler = middleware.RecoveryMiddleware(logger, handler)
+
+	server := &fasthttp.Server{
+		Handler: handler,
 		ReadTimeout: 15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout: 15 * time.Second,
-		MaxHeaderBytes: 1024 * 1024,
+		MaxRequestBodySize: 1024 * 1024,
+		Name: "Axiom-Ingest-Gateway",
 	}
 
 	idleConnsClosed := make(chan struct{})
@@ -62,13 +66,13 @@ func main() {
 		<-sigint
 
 		logger.Info("Shutdown signal received")
-		if err := server.Shutdown(context.Background()); err != nil {
+		if err := server.Shutdown(); err != nil {
 			logger.Error("HTTP server Shutdown", zap.Error(err))
 		}
 		close(idleConnsClosed)
 	}()
 
-	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+	if err := server.ListenAndServe(serverAddr); err != http.ErrServerClosed {
 		logger.Fatal("HTTP server ListenAndServe", zap.Error(err))
 	}
 

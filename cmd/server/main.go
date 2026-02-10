@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,6 +19,7 @@ func main() {
 		fmt.Printf("Failed to initialize logger: %s\n", err.Error())
 		return
 	}
+	defer logger.Sync()
 
 	viper, err := config.NewViper()
 	if err != nil {
@@ -72,7 +72,7 @@ func main() {
 		close(idleConnsClosed)
 	}()
 
-	if err := server.ListenAndServe(serverAddr); err != http.ErrServerClosed {
+	if err := server.ListenAndServe(serverAddr); err != nil {
 		logger.Fatal("HTTP server ListenAndServe", zap.Error(err))
 	}
 

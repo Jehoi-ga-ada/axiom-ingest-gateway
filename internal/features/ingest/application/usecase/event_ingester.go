@@ -29,5 +29,9 @@ func (u *eventIngester) Execute(ctx context.Context, req dto.CreateEventRequest)
 		return "", err
 	}
 
+	// TODO: Serialize data to binaries
+
+	// TODO: Handoff to dispatcher
+
 	return e.ID.String(), nil
 }

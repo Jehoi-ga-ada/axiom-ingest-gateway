@@ -14,6 +14,7 @@ type DispatcherConfig struct {
 	FlushInterval time.Duration
 	MaxWorkers int
 	QueueSize int
+	BufferMaxSize int
 }
 
 type tcpDispatcher struct {
@@ -21,6 +22,7 @@ type tcpDispatcher struct {
 	queue chan []byte
 	config DispatcherConfig
 	workerWG sync.WaitGroup
+	bytePool *sync.Pool
 }
 
 func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) domain.EventDispatcher {
@@ -28,6 +30,11 @@ func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) domain.EventDisp
 		logger: logger,
 		queue:  make(chan []byte, cfg.QueueSize),
 		config: cfg,
+		bytePool: &sync.Pool{
+			New: func() interface{} {
+				return make([]byte, cfg.BufferMaxSize)
+			},
+		},
 	}
 
 	d.start()
@@ -35,13 +42,20 @@ func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) domain.EventDisp
 }
 
 func (d *tcpDispatcher) Enqueue(ctx *fasthttp.RequestCtx, data []byte) error {
-	item := make([]byte, len(data))
-	copy(item, data)
+	if len(data) > d.config.BufferMaxSize {
+        return domain.ErrPayloadTooLarge
+    }
+
+	buf := d.bytePool.Get().([]byte)
+	
+	n := copy(buf, data)
+	item := buf[:n]
 
 	select {
 	case d.queue <- item:
 		return nil
 	default:
+		d.bytePool.Put(buf)
 		return domain.ErrDispatchQueueIsFull
 	}
 }
@@ -57,53 +71,48 @@ func (d *tcpDispatcher) worker() {
 	defer d.workerWG.Done()
 	
 	batch := make([][]byte, 0, d.config.BatchSize)
-	timer := time.NewTimer(d.config.FlushInterval)
-	defer timer.Stop()
+	ticker := time.NewTicker(d.config.FlushInterval) 
+    defer ticker.Stop()
 
 	for {
 		select {
 		case item, ok := <-d.queue:
 			if !ok {
-				d.flush(batch)
+				d.shutdown(batch)
 				return
 			}
-			
+
 			batch = append(batch, item)
 
 			if len(batch) >= d.config.BatchSize {
 				d.flush(batch)
 				batch = batch[:0]
-
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
-				timer.Reset(d.config.FlushInterval)
 			}
-		case <-timer.C:
+		case <-ticker.C:
 			if len(batch) > 0 {
 				d.flush(batch)
 				batch = batch[:0]
 			}
-
-			timer.Reset(d.config.FlushInterval)
 		}
 	}
 }
 
 func (d *tcpDispatcher) flush(batch [][]byte) {
-	if len(batch) == 0 {
-		return
-	}
-
 	// Week 2: Implement length-prefixed TCP write to Rust Log Engine
 
-	d.logger.Debug("flushing batch to log engine", 
-		zap.Int("count", len(batch)),
-		zap.String("target", "axiom-event-log-engine"),
-	)
+	d.logger.Debug("flushing batch", zap.Int("count", len(batch)))
+
+	for i := range batch {
+		buf := batch[i]
+		d.bytePool.Put(buf[:cap(buf)])
+		batch[i] = nil 
+	}
+}
+
+func (d *tcpDispatcher) shutdown(batch [][]byte) {
+	if len(batch) > 0 {
+		d.flush(batch)
+	}
 }
 
 func (d *tcpDispatcher) Close() {

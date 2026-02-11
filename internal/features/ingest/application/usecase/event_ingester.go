@@ -15,9 +15,10 @@ type eventIngester struct {
 	dispatcher domain.EventDispatcher
 }
 
-func NewEventIngester(logger *zap.Logger) EventIngester {
+func NewEventIngester(logger *zap.Logger, dispatcher domain.EventDispatcher) EventIngester {
 	return &eventIngester{
 		logger: logger,
+		dispatcher: dispatcher,
 	}
 }
 

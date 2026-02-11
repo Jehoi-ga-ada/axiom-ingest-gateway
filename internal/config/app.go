@@ -24,6 +24,7 @@ func NewApp(config *Config) domain.EventDispatcher {
 		FlushInterval: 10 * time.Millisecond,
 		MaxWorkers: 10,
 		QueueSize: 50000,
+		BufferMaxSize: 1024 * 1024,
 	}
 	eventDispatcher := eventInfra.NewTCPDispatcher(config.Logger, dispatcherConfig)
 	eventIngester := ucEvent.NewEventIngester(config.Logger, eventDispatcher)

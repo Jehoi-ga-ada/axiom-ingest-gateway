@@ -30,7 +30,7 @@ func main() {
 
 	router := config.NewRouter()
 
-	config.NewApp(&config.Config{
+	dispatcher := config.NewApp(&config.Config{
 		Router: router,
 		Viper: viper,
 		Logger: logger,
@@ -69,6 +69,9 @@ func main() {
 		if err := server.Shutdown(); err != nil {
 			logger.Error("HTTP server Shutdown", zap.Error(err))
 		}
+
+		dispatcher.Close()
+
 		close(idleConnsClosed)
 	}()
 

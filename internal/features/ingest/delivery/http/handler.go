@@ -3,6 +3,7 @@ package http
 import (
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/application/usecase"
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/delivery/dto"
+	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/domain"
 	u "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/shared/utils"
 	"github.com/bytedance/sonic"
 	"github.com/fasthttp/router"
@@ -37,6 +38,13 @@ func (h *EventHandler) NewEvent(ctx *fasthttp.RequestCtx) {
 
 	eventID, err := h.ei.Execute(ctx, req)
 	if err != nil {
+
+		if err == domain.ErrDispatchQueueIsFull {
+			ctx.Response.Header.Set("Retry-After", "5")
+			u.StatusServiceUnavailable(ctx, err.Error())
+			return
+		}
+
 		u.BadRequest(ctx, err.Error())
 		return
 	}

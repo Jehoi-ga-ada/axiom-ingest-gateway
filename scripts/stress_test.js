@@ -11,6 +11,7 @@ export const options = {
       maxVUs: 10000,                
       stages: [
         { target: 100000, duration: '1m' },
+        { target: 200000, duration: '1m' },
       ],
     },
   },

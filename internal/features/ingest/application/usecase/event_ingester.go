@@ -48,7 +48,7 @@ func (u *eventIngester) Execute(ctx *fasthttp.RequestCtx, req dto.CreateEventReq
 		return "", err
 	}
 
-	if err := u.dispatcher.Enqueue(ctx, data); err != nil {
+	if err := u.dispatcher.Enqueue(data); err != nil {
 		u.logger.Error("dispatcher queue full", zap.Error(err))
 		return "", err
 	}

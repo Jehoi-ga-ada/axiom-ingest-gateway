@@ -1,11 +1,13 @@
 package infrastructure
 
 import (
+	"bufio"
+	"encoding/binary"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/domain"
-	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 )
 
@@ -15,6 +17,8 @@ type DispatcherConfig struct {
 	MaxWorkers int
 	QueueSize int
 	BufferMaxSize int
+	TargetAddr string
+	WriteTimeout time.Duration
 }
 
 type tcpDispatcher struct {
@@ -23,6 +27,10 @@ type tcpDispatcher struct {
 	config DispatcherConfig
 	workerWG sync.WaitGroup
 	bytePool *sync.Pool
+
+	mu sync.Mutex
+	conn net.Conn
+	bw *bufio.Writer
 }
 
 func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) domain.EventDispatcher {
@@ -41,7 +49,7 @@ func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) domain.EventDisp
 	return d
 }
 
-func (d *tcpDispatcher) Enqueue(ctx *fasthttp.RequestCtx, data []byte) error {
+func (d *tcpDispatcher) Enqueue(data []byte) error {
 	if len(data) > d.config.BufferMaxSize {
         return domain.ErrPayloadTooLarge
     }
@@ -69,7 +77,7 @@ func (d *tcpDispatcher) start() {
 
 func (d *tcpDispatcher) worker() {
 	defer d.workerWG.Done()
-	
+
 	batch := make([][]byte, 0, d.config.BatchSize)
 	ticker := time.NewTicker(d.config.FlushInterval) 
     defer ticker.Stop()
@@ -78,7 +86,7 @@ func (d *tcpDispatcher) worker() {
 		select {
 		case item, ok := <-d.queue:
 			if !ok {
-				d.shutdown(batch)
+				d.finalFlush(batch)
 				return
 			}
 
@@ -98,18 +106,76 @@ func (d *tcpDispatcher) worker() {
 }
 
 func (d *tcpDispatcher) flush(batch [][]byte) {
-	// Week 2: Implement length-prefixed TCP write to Rust Log Engine
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
-	d.logger.Debug("flushing batch", zap.Int("count", len(batch)))
+	if err := d.ensureConnection(); err != nil {
+		d.logger.Error("network failure", zap.Error(err))
+		d.dropBatch(batch)
+		return
+	}
 
-	for i := range batch {
-		buf := batch[i]
-		d.bytePool.Put(buf[:cap(buf)])
-		batch[i] = nil 
+	d.conn.SetWriteDeadline(time.Now().Add(d.config.WriteTimeout))
+
+	header := make([]byte, 4)
+	for _, msg := range batch {
+		binary.BigEndian.PutUint32(header, uint32(len(msg)))
+
+		d.bw.Write(header)
+		d.bw.Write(msg)
+	}
+
+	if err := d.bw.Flush(); err != nil {
+		d.logger.Error("flush failed", zap.Error(err))
+		d.closeConnection()
+		d.dropBatch(batch)
+		return
+	}
+
+	d.releaseBatch(batch)
+}
+
+func (d *tcpDispatcher) ensureConnection() error {
+	if d.conn != nil {
+		return nil
+	}
+
+	conn, err := net.DialTimeout("tcp", d.config.TargetAddr, 5 * time.Second)
+	if err != nil {
+		return err
+	}
+
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetNoDelay(true)
+		tcpConn.SetKeepAlive(true)
+	}
+
+	d.conn = conn
+	d.bw = bufio.NewWriterSize(conn, 128 * 1024)
+	return nil
+}
+
+func (d *tcpDispatcher) closeConnection() {
+	if d.conn != nil {
+		d.conn.Close()
+		d.conn = nil
+		d.bw = nil
 	}
 }
 
-func (d *tcpDispatcher) shutdown(batch [][]byte) {
+func (d *tcpDispatcher) releaseBatch(batch [][]byte) {
+	for i := range batch {
+		d.bytePool.Put(batch[i][:cap(batch[i])])
+		batch[i] = nil
+	}
+}
+
+func (d *tcpDispatcher) dropBatch(batch [][]byte) {
+	d.logger.Warn("dropping batch due to network error", zap.Int("size", len(batch)))
+	d.releaseBatch(batch)
+}
+
+func (d *tcpDispatcher) finalFlush(batch [][]byte) {
 	if len(batch) > 0 {
 		d.flush(batch)
 	}
@@ -121,6 +187,12 @@ func (d *tcpDispatcher) Close() {
 	close(d.queue)
 
 	d.workerWG.Wait()
+
+	d.mu.Lock()
+
+	d.closeConnection()
+
+	d.mu.Unlock()
 
 	d.logger.Info("dispatcher shut down gracefully")
 }

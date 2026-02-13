@@ -1,9 +1,11 @@
 package middleware
 
 import (
-    "runtime/debug"
-    "go.uber.org/zap"
-    "github.com/valyala/fasthttp"
+	"runtime/debug"
+
+	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/shared/utils"
+	"github.com/valyala/fasthttp"
+	"go.uber.org/zap"
 )
 
 func RecoveryMiddleware(log *zap.Logger, next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -16,9 +18,7 @@ func RecoveryMiddleware(log *zap.Logger, next fasthttp.RequestHandler) fasthttp.
                     zap.ByteString("path", ctx.Path()),
                 )
 
-                ctx.Response.SetStatusCode(fasthttp.StatusInternalServerError)
-                ctx.SetContentType("application/json")
-                ctx.SetBodyString(`{"status":"error","message":"internal server error"}`)
+                utils.StatusInternalServerError(ctx, "internal server error")
             }
         }()
         next(ctx)

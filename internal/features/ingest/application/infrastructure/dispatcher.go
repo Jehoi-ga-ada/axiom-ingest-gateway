@@ -12,50 +12,63 @@ import (
 )
 
 type DispatcherConfig struct {
-	BatchSize int
+	BatchSize     int
 	FlushInterval time.Duration
-	MaxWorkers int
-	QueueSize int
+	MaxWorkers    int
+	QueueSize     int
 	BufferMaxSize int
-	TargetAddr string
-	WriteTimeout time.Duration
+	TargetAddr    string
+	WriteTimeout  time.Duration
 }
 
 type tcpDispatcher struct {
-	logger *zap.Logger
-	queue chan []byte
-	config DispatcherConfig
-	workerWG sync.WaitGroup
+	logger   *zap.Logger
+	config   DispatcherConfig
+	queue    chan []byte
+	outbound chan [][]byte
 	bytePool *sync.Pool
-
-	mu sync.Mutex
-	conn net.Conn
-	bw *bufio.Writer
+	batchPool *sync.Pool 
+	workerWG sync.WaitGroup
+	senderWG sync.WaitGroup 
+	stop     chan struct{}
 }
 
 func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) domain.EventDispatcher {
 	d := &tcpDispatcher{
-		logger: logger,
-		queue:  make(chan []byte, cfg.QueueSize),
-		config: cfg,
+		logger:   logger,
+		config:   cfg,
+		queue:    make(chan []byte, cfg.QueueSize),
+		outbound: make(chan [][]byte, cfg.MaxWorkers),
+		stop:     make(chan struct{}),
 		bytePool: &sync.Pool{
 			New: func() interface{} {
 				return make([]byte, cfg.BufferMaxSize)
 			},
 		},
+		batchPool: &sync.Pool{
+			New: func() interface{} {
+				return make([][]byte, 0, cfg.BatchSize)
+			},
+		},
 	}
 
-	d.start()
+	d.senderWG.Add(1)
+	go d.sender()
+
+	for i := 0; i < cfg.MaxWorkers; i++ {
+		d.workerWG.Add(1)
+		go d.worker()
+	}
+
 	return d
 }
 
 func (d *tcpDispatcher) Enqueue(data []byte) error {
 	if len(data) > d.config.BufferMaxSize {
-        return domain.ErrPayloadTooLarge
-    }
+		return domain.ErrPayloadTooLarge
+	}
 
 	buf := d.bytePool.Get().([]byte)
-	
 	n := copy(buf, data)
 	item := buf[:n]
 
@@ -63,136 +76,126 @@ func (d *tcpDispatcher) Enqueue(data []byte) error {
 	case d.queue <- item:
 		return nil
 	default:
-		d.bytePool.Put(buf)
+		d.bytePool.Put(buf[:cap(buf)])
 		return domain.ErrDispatchQueueIsFull
-	}
-}
-
-func (d *tcpDispatcher) start() {
-	for i := 0; i < d.config.MaxWorkers; i++ {
-		d.workerWG.Add(1)
-		go d.worker()
 	}
 }
 
 func (d *tcpDispatcher) worker() {
 	defer d.workerWG.Done()
 
-	batch := make([][]byte, 0, d.config.BatchSize)
-	ticker := time.NewTicker(d.config.FlushInterval) 
-    defer ticker.Stop()
+	batch := d.batchPool.Get().([][]byte)
+	batch = batch[:0]
+	ticker := time.NewTicker(d.config.FlushInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case item, ok := <-d.queue:
 			if !ok {
-				d.finalFlush(batch)
+				if len(batch) > 0 {
+					d.outbound <- batch
+				} else {
+					d.batchPool.Put(batch)
+				}
 				return
 			}
 
 			batch = append(batch, item)
 
 			if len(batch) >= d.config.BatchSize {
-				d.flush(batch)
-				batch = batch[:0]
+				d.outbound <- batch
+				batch = d.batchPool.Get().([][]byte)
 			}
 		case <-ticker.C:
 			if len(batch) > 0 {
-				d.flush(batch)
-				batch = batch[:0]
+				d.outbound <- batch
+				batch = d.batchPool.Get().([][]byte)
 			}
+		case <-d.stop:
+			if len(batch) > 0 {
+				d.outbound <- batch
+			} else {
+				d.batchPool.Put(batch)
+			}
+			return
 		}
 	}
 }
 
-func (d *tcpDispatcher) flush(batch [][]byte) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if err := d.ensureConnection(); err != nil {
-		d.logger.Error("network failure", zap.Error(err))
-		d.dropBatch(batch)
-		return
-	}
-
-	d.conn.SetWriteDeadline(time.Now().Add(d.config.WriteTimeout))
-
+func (d *tcpDispatcher) sender() {
+	defer d.senderWG.Done()
+	var conn net.Conn
+	var bw *bufio.Writer
 	header := make([]byte, 4)
-	for _, msg := range batch {
-		binary.BigEndian.PutUint32(header, uint32(len(msg)))
 
-		d.bw.Write(header)
-		d.bw.Write(msg)
+	cleanup := func() {
+		if conn != nil {
+			conn.Close()
+			conn = nil
+			bw = nil
+		}
 	}
 
-	if err := d.bw.Flush(); err != nil {
-		d.logger.Error("flush failed", zap.Error(err))
-		d.closeConnection()
-		d.dropBatch(batch)
-		return
+	for batch := range d.outbound {
+		if conn == nil {
+			var err error
+			conn, err = net.DialTimeout("tcp", d.config.TargetAddr, 3*time.Second)
+			if err != nil {
+				d.logger.Error("dial failed", zap.Error(err))
+				d.releaseBatch(batch)
+				time.Sleep(500 * time.Millisecond) 
+				continue
+			}
+			if tcpConn, ok := conn.(*net.TCPConn); ok {
+				tcpConn.SetNoDelay(true)
+				tcpConn.SetKeepAlive(true)
+			}
+			bw = bufio.NewWriterSize(conn, 128*1024)
+		}
+
+		conn.SetWriteDeadline(time.Now().Add(d.config.WriteTimeout))
+		
+		var err error
+		for _, msg := range batch {
+			binary.BigEndian.PutUint32(header, uint32(len(msg)))
+			if _, err = bw.Write(header); err != nil { break }
+			if _, err = bw.Write(msg); err != nil { break }
+		}
+
+		if err == nil {
+			err = bw.Flush()
+		}
+
+		if err != nil {
+			d.logger.Error("transport error", zap.Error(err))
+			cleanup()
+		}
+		
+		d.releaseBatch(batch)
 	}
-
-	d.releaseBatch(batch)
-}
-
-func (d *tcpDispatcher) ensureConnection() error {
-	if d.conn != nil {
-		return nil
-	}
-
-	conn, err := net.DialTimeout("tcp", d.config.TargetAddr, 5 * time.Second)
-	if err != nil {
-		return err
-	}
-
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		tcpConn.SetNoDelay(true)
-		tcpConn.SetKeepAlive(true)
-	}
-
-	d.conn = conn
-	d.bw = bufio.NewWriterSize(conn, 128 * 1024)
-	return nil
-}
-
-func (d *tcpDispatcher) closeConnection() {
-	if d.conn != nil {
-		d.conn.Close()
-		d.conn = nil
-		d.bw = nil
-	}
+	cleanup()
 }
 
 func (d *tcpDispatcher) releaseBatch(batch [][]byte) {
 	for i := range batch {
-		d.bytePool.Put(batch[i][:cap(batch[i])])
-		batch[i] = nil
+		if batch[i] != nil {
+			d.bytePool.Put(batch[i][:cap(batch[i])])
+			batch[i] = nil
+		}
 	}
-}
 
-func (d *tcpDispatcher) dropBatch(batch [][]byte) {
-	d.logger.Warn("dropping batch due to network error", zap.Int("size", len(batch)))
-	d.releaseBatch(batch)
-}
-
-func (d *tcpDispatcher) finalFlush(batch [][]byte) {
-	if len(batch) > 0 {
-		d.flush(batch)
-	}
+	d.batchPool.Put(batch[:0])
 }
 
 func (d *tcpDispatcher) Close() {
-	d.logger.Info("shutting down dispatcher...")
-
+	d.logger.Info("shutting down dispatcher")
+	
+	close(d.stop)
 	close(d.queue)
-
 	d.workerWG.Wait()
-
-	d.mu.Lock()
-
-	d.closeConnection()
-
-	d.mu.Unlock()
-
-	d.logger.Info("dispatcher shut down gracefully")
+	close(d.outbound)
+	d.senderWG.Wait()
+	
+	d.logger.Info("dispatcher closed gracefully")
 }

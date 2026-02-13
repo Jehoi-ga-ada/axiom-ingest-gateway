@@ -38,3 +38,7 @@ func RequestEntityTooLarge(ctx *fasthttp.RequestCtx, message string) {
 func StatusServiceUnavailable(ctx *fasthttp.RequestCtx, message string) {
 	base(ctx, fasthttp.StatusServiceUnavailable, "STATUS_SERVICE_UNAVAILABLE", nil, message)
 }
+
+func StatusInternalServerError(ctx *fasthttp.RequestCtx, message string) {
+	base(ctx, fasthttp.StatusInternalServerError, "STATUS_INTERNAL_SERVER_ERROR", nil, message)
+}

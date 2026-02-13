@@ -25,6 +25,8 @@ func NewApp(config *Config) domain.EventDispatcher {
 		MaxWorkers: 10,
 		QueueSize: 50000,
 		BufferMaxSize: 1024 * 1024,
+		TargetAddr: "127.0.0.1:8080",
+		WriteTimeout: 5 * time.Second,
 	}
 	eventDispatcher := eventInfra.NewTCPDispatcher(config.Logger, dispatcherConfig)
 	eventIngester := ucEvent.NewEventIngester(config.Logger, eventDispatcher)

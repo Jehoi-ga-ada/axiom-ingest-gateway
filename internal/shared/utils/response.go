@@ -34,6 +34,10 @@ func RequestEntityTooLarge(ctx *fasthttp.RequestCtx, message string) {
 	base(ctx, fasthttp.StatusRequestEntityTooLarge, "STATUS_ENTITY_TOO_LARGE", nil, message)
 }
 
+func StatusUnauthorized(ctx *fasthttp.RequestCtx, message string) {
+	base(ctx, fasthttp.StatusUnauthorized, "STATUS_UNAUTHORIZED", nil, message)
+}
+
 // --- Server Helpers ---
 func StatusServiceUnavailable(ctx *fasthttp.RequestCtx, message string) {
 	base(ctx, fasthttp.StatusServiceUnavailable, "STATUS_SERVICE_UNAVAILABLE", nil, message)

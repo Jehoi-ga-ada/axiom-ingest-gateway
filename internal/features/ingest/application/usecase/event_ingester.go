@@ -1,8 +1,12 @@
 package usecase
 
 import (
+	"sync"
+
+	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/application/infrastructure"
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/delivery/dto"
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/domain"
+	shared "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/shared/domain"
 	v1 "github.com/Jehoi-ga-ada/axiom-schema/gen/go/v1"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
@@ -10,12 +14,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type eventIngester struct {
-	logger *zap.Logger
-	dispatcher domain.EventDispatcher
+var eventPool = sync.Pool{
+    New: func() interface{} { return &v1.Event{} },
 }
 
-func NewEventIngester(logger *zap.Logger, dispatcher domain.EventDispatcher) EventIngester {
+type eventIngester struct {
+	logger *zap.Logger
+	dispatcher infrastructure.EventDispatcher
+}
+
+func NewEventIngester(logger *zap.Logger, dispatcher infrastructure.EventDispatcher) EventIngester {
 	return &eventIngester{
 		logger: logger,
 		dispatcher: dispatcher,
@@ -23,8 +31,14 @@ func NewEventIngester(logger *zap.Logger, dispatcher domain.EventDispatcher) Eve
 }
 
 func (u *eventIngester) Execute(ctx *fasthttp.RequestCtx, req dto.CreateEventRequest) (string, error) {
-	e, err := domain.NewEvent(req.Type, req.Timestamp, req.RawBody)
+	tenantID, ok := ctx.UserValue("tenant_id").(shared.TenantID)
+	if !ok {
+		return "", domain.ErrUnauthorized
+	}
 
+	tenantIDstr := string(tenantID)
+
+	e, err := domain.NewEvent(tenantIDstr, req.Type, req.Timestamp, req.RawBody)
 	if err != nil {
 		u.logger.Error("failed to create event with error",
 			zap.Error(err),
@@ -33,12 +47,20 @@ func (u *eventIngester) Execute(ctx *fasthttp.RequestCtx, req dto.CreateEventReq
 		return "", err
 	}
 
-	pb := &v1.Event{
-		Id: e.ID[:],
-		EventType: string(e.Type),
-		Timestsamp: timestamppb.New(e.Timestamp),
-		RawBody: e.RawBody,
+	err = e.IsValid()
+	if err != nil {
+		return "", err
 	}
+
+	pb := eventPool.Get().(*v1.Event)
+	pb.Reset()
+	defer eventPool.Put(pb)
+
+	pb.TenantId = tenantIDstr
+	pb.Id = e.ID[:]
+	pb.EventType = req.Type
+    pb.Timestamp = timestamppb.New(e.Timestamp)
+    pb.RawBody = e.RawBody
 
 	data, err := proto.Marshal(pb)
 	if err != nil {

@@ -1,5 +1,8 @@
 # axiom-ingest-gateway
 
+## Reports
+[Click here to view performance report](https://jehoi-ga-ada.github.io/axiom-ingest-gateway/report.html)
+
 ## Purpose
 The ingest gateway is the external entry point of the Axiom platform.  
 It accepts events from clients, validates and authenticates requests, applies admission control, and forwards accepted events to the internal event log.
@@ -25,6 +28,3 @@ This service is optimized for low-latency ingress and resilience under bursty, u
 - Must fail fast under overload
 - Must never corrupt or mutate event data
 - If downstream systems are unavailable, ingestion must degrade gracefully
-
-## Status
-Week 0: Minimal HTTP server with `/health` endpoint.

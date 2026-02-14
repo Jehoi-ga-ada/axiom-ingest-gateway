@@ -8,24 +8,27 @@ import (
 
 type MemoryKeyRegistry struct {
 	mu sync.RWMutex
-	keys map[string]domain.APIKeyMetadata
+	keys map[string]*domain.APIKeyMetadata
 }
 
 func NewMemoryKeyRegistry() KeyRegistry {
 	return &MemoryKeyRegistry{
-		keys: make(map[string]domain.APIKeyMetadata),
+		keys: make(map[string]*domain.APIKeyMetadata),
 	}
 }
 
-func (r *MemoryKeyRegistry) Get(key []byte) (domain.APIKeyMetadata, bool) {
+func (r *MemoryKeyRegistry) Get(key []byte) (*domain.APIKeyMetadata, bool) {
     r.mu.RLock()
-    defer r.mu.RUnlock()
     meta, ok := r.keys[string(key)]
-    return meta, ok
+    r.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+    return meta, true
 }
 
 func (r *MemoryKeyRegistry) Upsert(key string, meta domain.APIKeyMetadata) {
     r.mu.Lock()
-    defer r.mu.Unlock()
-    r.keys[key] = meta
+    r.keys[key] = &meta
+    r.mu.Unlock()
 }

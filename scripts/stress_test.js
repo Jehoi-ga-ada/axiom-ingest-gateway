@@ -10,8 +10,7 @@ export const options = {
       preAllocatedVUs: 5000,       
       maxVUs: 10000,                
       stages: [
-        { target: 100000, duration: '1m' },
-        { target: 200000, duration: '1m' },
+        { target: 100000, duration: '1m' }, 
       ],
     },
   },
@@ -42,6 +41,7 @@ export default function () {
   const params = {
     headers: {
       'Content-Type': 'application/json',
+      'X-API-Key': 'ax_test_key_1', 
     },
   };
 

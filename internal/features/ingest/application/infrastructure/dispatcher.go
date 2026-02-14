@@ -33,7 +33,7 @@ type tcpDispatcher struct {
 	stop     chan struct{}
 }
 
-func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) domain.EventDispatcher {
+func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) EventDispatcher {
 	d := &tcpDispatcher{
 		logger:   logger,
 		config:   cfg,

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/config"
+	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/auth/application/service"
+	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/auth/domain"
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/middleware"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
@@ -47,8 +49,19 @@ func main() {
 		zap.String("port", port),
 	)
 
-	handler := middleware.ZapLogger(logger)(router.Handler)
-	handler = middleware.RecoveryMiddleware(logger, handler)
+	registry := service.NewMemoryKeyRegistry()
+	mockKeys := map[string]domain.APIKeyMetadata{
+        "ax_test_key_1": {TenantID: "tenant_alpha", Active: true},
+        "ax_test_key_2": {TenantID: "tenant_beta", Active: true},
+    }
+
+    for k, v := range mockKeys {
+        registry.Upsert(k, v)
+    }
+
+	handler := middleware.AuthMiddleware(registry)(router.Handler)
+	handler = middleware.ZapLogger(logger)(handler)
+	handler = middleware.RecoveryMiddleware(logger)(handler)
 
 	server := &fasthttp.Server{
 		Handler: handler,

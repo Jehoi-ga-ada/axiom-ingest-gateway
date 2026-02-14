@@ -5,12 +5,14 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/shared/domain"
 )
 
 type EventType string
 
 type Event struct {
 	ID ulid.ULID
+	TenantID domain.TenantID
 	Type EventType
 	Timestamp time.Time
 	RawBody []byte
@@ -41,7 +43,7 @@ func (e Event) IsValid() error {
 	return nil
 }
 
-func NewEvent(eventType string, timestamp time.Time, rawBody []byte) (*Event, error) {
+func NewEvent(tenantID, eventType string, timestamp time.Time, rawBody []byte) (*Event, error) {
     entropy := rand.Reader
     id, err := ulid.New(ulid.Timestamp(timestamp), entropy)
 
@@ -50,6 +52,7 @@ func NewEvent(eventType string, timestamp time.Time, rawBody []byte) (*Event, er
     }
 
     event := &Event{
+		TenantID:  domain.TenantID(tenantID),
         ID:        id,
         Type:      EventType(eventType),
         Timestamp: timestamp,

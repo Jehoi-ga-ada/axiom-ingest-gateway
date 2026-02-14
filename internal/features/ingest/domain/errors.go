@@ -9,4 +9,5 @@ var (
 	ErrEventTooLarge       = errors.New("event too large")
 	ErrDispatchQueueIsFull = errors.New("dispatcher queue saturated")
 	ErrPayloadTooLarge 	   = errors.New("payload is too large")
+	ErrUnauthorized		   = errors.New("unauthorized")
 )

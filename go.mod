@@ -3,7 +3,7 @@ module github.com/Jehoi-ga-ada/axiom-ingest-gateway
 go 1.25.5
 
 require (
-	github.com/Jehoi-ga-ada/axiom-schema v0.0.0-20260211083238-d73ab7136d27
+	github.com/Jehoi-ga-ada/axiom-schema v0.0.0-20260214081348-5bd97e54319d
 	github.com/bytedance/sonic v1.15.0
 	github.com/fasthttp/router v1.5.4
 	github.com/oklog/ulid/v2 v2.1.1

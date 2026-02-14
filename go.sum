@@ -1,5 +1,7 @@
 github.com/Jehoi-ga-ada/axiom-schema v0.0.0-20260211083238-d73ab7136d27 h1:ELOt2m22/EfMakjFuN3s6XIy1ySHZ/42GZnmQOz3TEw=
 github.com/Jehoi-ga-ada/axiom-schema v0.0.0-20260211083238-d73ab7136d27/go.mod h1:A7jBPzjWVowdJtnh4mzVwpHup4DJtAUTNXH5jsIts0k=
+github.com/Jehoi-ga-ada/axiom-schema v0.0.0-20260214081348-5bd97e54319d h1:AqtM4BCdwd/VA2FhGNqnj1zzNibHueJWLOt7dR4ebYw=
+github.com/Jehoi-ga-ada/axiom-schema v0.0.0-20260214081348-5bd97e54319d/go.mod h1:A7jBPzjWVowdJtnh4mzVwpHup4DJtAUTNXH5jsIts0k=
 github.com/andybalholm/brotli v1.2.0 h1:ukwgCxwYrmACq68yiUqwIWnGY0cTPox/M94sVwToPjQ=
 github.com/andybalholm/brotli v1.2.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/bytedance/gopkg v0.1.3 h1:TPBSwH8RsouGCBcMBktLt1AymVo2TVsBVCY4b6TnZ/M=

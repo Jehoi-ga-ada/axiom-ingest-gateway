@@ -6,7 +6,7 @@ import (
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/application/infrastructure"
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/delivery/dto"
 	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/domain"
-	shared "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/shared/domain"
+	auth "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/auth/domain"
 	v1 "github.com/Jehoi-ga-ada/axiom-schema/gen/go/v1"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
@@ -31,14 +31,14 @@ func NewEventIngester(logger *zap.Logger, dispatcher infrastructure.EventDispatc
 }
 
 func (u *eventIngester) Execute(ctx *fasthttp.RequestCtx, req dto.CreateEventRequest) (string, error) {
-	tenantID, ok := ctx.UserValue("tenant_id").(shared.TenantID)
+	meta, ok := ctx.UserValue("auth_meta").(*auth.APIKeyMetadata)
 	if !ok {
 		return "", domain.ErrUnauthorized
 	}
 
-	tenantIDstr := string(tenantID)
+	tenantID := string(meta.TenantID)
 
-	e, err := domain.NewEvent(tenantIDstr, req.Type, req.Timestamp, req.RawBody)
+	e, err := domain.NewEvent(tenantID, req.Type, req.Timestamp, req.RawBody)
 	if err != nil {
 		u.logger.Error("failed to create event with error",
 			zap.Error(err),
@@ -56,7 +56,7 @@ func (u *eventIngester) Execute(ctx *fasthttp.RequestCtx, req dto.CreateEventReq
 	pb.Reset()
 	defer eventPool.Put(pb)
 
-	pb.TenantId = tenantIDstr
+	pb.TenantId = tenantID
 	pb.Id = e.ID[:]
 	pb.EventType = req.Type
     pb.Timestamp = timestamppb.New(e.Timestamp)

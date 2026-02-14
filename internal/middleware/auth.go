@@ -23,7 +23,7 @@ func AuthMiddleware(registry service.KeyRegistry) func(next fasthttp.RequestHand
 				return
 			}
 			
-			ctx.SetUserValue("auth_meta", &meta)
+			ctx.SetUserValue("auth_meta", meta)
         	next(ctx)
 		}
 	}

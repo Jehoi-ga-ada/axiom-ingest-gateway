@@ -6,7 +6,6 @@ import (
 	eventInfra "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/application/infrastructure"
 	ucEvent "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/application/usecase"
 	eventHttp "github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/delivery/http"
-	"github.com/Jehoi-ga-ada/axiom-ingest-gateway/internal/features/ingest/domain"
 	"github.com/fasthttp/router"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -18,7 +17,7 @@ type Config struct {
 	Logger *zap.Logger
 }
 
-func NewApp(config *Config) domain.EventDispatcher {
+func NewApp(config *Config) eventInfra.EventDispatcher {
 	dispatcherConfig := eventInfra.DispatcherConfig{
 		BatchSize: 1000,
 		FlushInterval: 10 * time.Millisecond,

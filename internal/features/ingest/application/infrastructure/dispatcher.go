@@ -154,7 +154,7 @@ func (d *tcpDispatcher) sender() {
 				tcpConn.SetNoDelay(true)
 				tcpConn.SetKeepAlive(true)
 			}
-			bw = bufio.NewWriterSize(conn, 256*1024)
+			bw = bufio.NewWriterSize(conn, 128*1024)
 		}
 
 		conn.SetWriteDeadline(time.Now().Add(d.config.WriteTimeout))

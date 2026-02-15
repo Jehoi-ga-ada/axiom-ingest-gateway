@@ -15,6 +15,7 @@ type DispatcherConfig struct {
 	BatchSize     int
 	FlushInterval time.Duration
 	MaxWorkers    int
+	MaxSenders int
 	QueueSize     int
 	BufferMaxSize int
 	TargetAddr    string
@@ -52,8 +53,10 @@ func NewTCPDispatcher(logger *zap.Logger, cfg DispatcherConfig) EventDispatcher 
 		},
 	}
 
-	d.senderWG.Add(1)
-	go d.sender()
+	for i := 0; i < cfg.MaxSenders; i ++ {
+		d.senderWG.Add(1)
+		go d.sender()
+	}
 
 	for i := 0; i < cfg.MaxWorkers; i++ {
 		d.workerWG.Add(1)
@@ -151,7 +154,7 @@ func (d *tcpDispatcher) sender() {
 				tcpConn.SetNoDelay(true)
 				tcpConn.SetKeepAlive(true)
 			}
-			bw = bufio.NewWriterSize(conn, 128*1024)
+			bw = bufio.NewWriterSize(conn, 256*1024)
 		}
 
 		conn.SetWriteDeadline(time.Now().Add(d.config.WriteTimeout))

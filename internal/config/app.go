@@ -22,6 +22,7 @@ func NewApp(config *Config) eventInfra.EventDispatcher {
 		BatchSize: 1000,
 		FlushInterval: 10 * time.Millisecond,
 		MaxWorkers: 10,
+		MaxSenders: 1,
 		QueueSize: 50000,
 		BufferMaxSize: 1024 * 1024,
 		TargetAddr: "127.0.0.1:8080",

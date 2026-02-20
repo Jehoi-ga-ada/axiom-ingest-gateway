@@ -1,7 +1,6 @@
 package infrastructure
 
 import (
-	"bufio"
 	"encoding/binary"
 	"net"
 	"sync"
@@ -129,14 +128,14 @@ func (d *tcpDispatcher) worker() {
 func (d *tcpDispatcher) sender() {
 	defer d.senderWG.Done()
 	var conn net.Conn
-	var bw *bufio.Writer
-	header := make([]byte, 4)
+	ackBuf := make([]byte, 1)
+
+	headerPool := make([]byte, d.config.BatchSize*4)
 
 	cleanup := func() {
 		if conn != nil {
 			conn.Close()
 			conn = nil
-			bw = nil
 		}
 	}
 
@@ -152,30 +151,33 @@ func (d *tcpDispatcher) sender() {
 			}
 			if tcpConn, ok := conn.(*net.TCPConn); ok {
 				tcpConn.SetNoDelay(true)
-				tcpConn.SetKeepAlive(true)
 			}
-			bw = bufio.NewWriterSize(conn, 128*1024)
 		}
 
 		conn.SetWriteDeadline(time.Now().Add(d.config.WriteTimeout))
 		
-		var err error
-		for _, msg := range batch {
-			binary.BigEndian.PutUint32(header, uint32(len(msg)))
-			if _, err = bw.Write(header); err != nil { break }
-			if _, err = bw.Write(msg); err != nil { break }
-		}
+		vBuffers := make(net.Buffers, 0, len(batch)*2)
+        
+        for i, msg := range batch {
+            start := i * 4
+			header := headerPool[start : start+4]
+            binary.BigEndian.PutUint32(header, uint32(len(msg)))
+            vBuffers = append(vBuffers, header, msg)
+        }
+
+		_, err := vBuffers.WriteTo(conn)
 
 		if err == nil {
-			err = bw.Flush()
-		}
+            conn.SetReadDeadline(time.Now().Add(d.config.WriteTimeout))
+            _, err = conn.Read(ackBuf)
+        }
 
-		if err != nil {
-			d.logger.Error("transport error", zap.Error(err))
-			cleanup()
-		}
-		
-		d.releaseBatch(batch)
+        if err != nil {
+            d.logger.Error("transport error", zap.Error(err))
+            cleanup()
+        }
+        
+        d.releaseBatch(batch)
 	}
 	cleanup()
 }

@@ -139,7 +139,11 @@ func (d *tcpDispatcher) sender() {
 		}
 	}
 
+	vBuffers := make(net.Buffers, 0, d.config.BatchSize*2)
+
 	for batch := range d.outbound {
+		vBuffers = vBuffers[:0]
+		
 		if conn == nil {
 			var err error
 			conn, err = net.DialTimeout("tcp", d.config.TargetAddr, 3*time.Second)
@@ -156,8 +160,6 @@ func (d *tcpDispatcher) sender() {
 
 		conn.SetWriteDeadline(time.Now().Add(d.config.WriteTimeout))
 		
-		vBuffers := make(net.Buffers, 0, len(batch)*2)
-        
         for i, msg := range batch {
             start := i * 4
 			header := headerPool[start : start+4]

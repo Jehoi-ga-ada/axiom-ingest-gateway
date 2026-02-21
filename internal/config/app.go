@@ -19,18 +19,16 @@ type Config struct {
 
 func NewApp(config *Config) eventInfra.EventDispatcher {
 	dispatcherConfig := eventInfra.DispatcherConfig{
-		BatchSize: 1000,
-		FlushInterval: 10 * time.Millisecond,
-		MaxWorkers: 10,
-		MaxSenders: 6,
-		QueueSize: 50000,
-		BufferMaxSize: 1024 * 1024,
-		TargetAddr: "127.0.0.1:8080",
-		// TargetAddr: "/tmp/axiom.sock",
-		WriteTimeout: 5 * time.Second,
+		BatchSize: config.Viper.GetInt("BATCH_SIZE"),
+		FlushInterval: time.Duration(config.Viper.GetInt("FLUSH_INTERVAL")) * time.Millisecond,
+		MaxWorkers: config.Viper.GetInt("MAX_WORKERS"),
+		MaxSenders: config.Viper.GetInt("MAX_SENDERS"),
+		QueueSize: config.Viper.GetInt("QUEUE_SIZE"),
+		BufferMaxSize: config.Viper.GetInt("BUFFER_MAX_SIZE") * 1024,
+		TargetAddr: config.Viper.GetString("DISPATCHER_ADDR"),
+		WriteTimeout: time.Duration(config.Viper.GetInt("WRITE_TIMEOUT")) * time.Second,
 	}
 	eventDispatcher := eventInfra.NewTCPDispatcher(config.Logger, dispatcherConfig)
-	// eventDispatcher := eventInfra.NewUDSDispatcher(config.Logger, dispatcherConfig)
 	eventIngester := ucEvent.NewEventIngester(config.Logger, eventDispatcher)
 	eventHandler := eventHttp.NewEventHandler(eventIngester)
 
